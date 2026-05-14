@@ -2,9 +2,12 @@ name: Sync docs to Wiki
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feat-agents-skill-and-add-trigger-in-sync-wiki-action
     paths:
       - '.docs/**'
+  workflow_dispatch:
 
 jobs:
   sync-wiki:
