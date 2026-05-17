@@ -19,5 +19,7 @@ sidebar:
             page: clip_store-v1.0
       - title: Shared Libraries
         items:
+          - title: Lib Pipeline
+            page: libpipeline-v1.0
           - title: Stream Logger
             page: stream_logger-v1.0

@@ -1,8 +1,64 @@
 # `stream-merge` — 細部開發文件 v1.0
 
 > **對應檔案**：`applets/stream_merge.c`
-> **版本**：v1.0 / 2026-05-11
+> **版本**：v1.0 / 2026-05-11（v1.1 補入 simplified ingest，2026-05-18）
 > **定位**：`stream-merge` 是整個 Data Analyzer 管線的**唯一資料讀取者**。它透過 inotify 監聽 filesystem，主動累積 chunk、偵測 gap、切割 clips、提取 events，並將結果以 JSON Lines 形式輸出到 stdout。
+
+***
+
+## 零、v1 Ingest 架構：growing blob + tail-read（與 Fastify 對齊）
+
+`stream-merge` v1 不再面對「分割好的 chunk 檔」，而是面對 Fastify 上層不斷 append 的單一巨型二進位檔。本節說明與原本 chunk-based 設計的差異。
+
+### 0.1 上下層出入口契約
+
+```
+上層 (Fastify)                            下層 (stream_merge)
+├─ STRT          → open("{sid}.bin", "a")  ├─ open("{sid}.bin", "r") @ offset=0
+├─ DATA × N      → append byte             ├─ IN_MODIFY → tail-read → 提取位元→ emit clip
+│                                          │   (與上層並行)
+└─ END_          → close() + sentinel       └─ sentinel → drain EOF → final clip → exit 0
+```
+
+上下層**並行**運作：Fastify append、stream_merge tail-read，透過 filesystem 解耦。上層基本上一定先結束，下層負責在 sentinel 出現後將檔尾剩餘 byte 讀完、flush 最後 clip、作為整條管線最後退出的角色。
+
+### 0.2 項目對照表
+
+| 項目 | v1 行為 | v2 規劃 |
+|---|---|---|
+| 落地檔案 | 單一 `{session_id}.bin`（append-only）| 可能拆分 `.h264` / `.aac` |
+| watch 對象 | 檔案本身：`pipeline_watch_file({session_id}.bin)` 以 `IN_MODIFY` | 同 v1 |
+| sibling watch | 目錄：`pipeline_watch_dir(src_dir)` 以 `IN_CREATE` 偵測 sentinel | 同 v1 |
+| seq | 本身不存在；buffer 內在偏移量即為全局序列 | 加上 frame-level seq |
+| binary header | **不存在**，下層以 codec sync word / NAL boundary 自行提取 | 選擇性加上輕量 header |
+| `ChunkEntry` | v1 重定義為 `Frame` / `Segment`（根據 codec）或使用 raw byte window | 依據路徑調整 |
+| `crc32` / `is_corrupted` | 預設不進行，`--quality-check` flag 開啟時以滑動窗 CRC | CRC + sync 驗證 |
+| sentinel | `pipeline_is_sentinel(".pipeline_end")` → drain EOF → exit 0 | 同 v1 |
+
+### 0.3 狀態保持
+
+```c
+struct IngestState {
+    int        bin_fd;        // open("{session_id}.bin", O_RDONLY)
+    off_t      cursor;        // 下一次 read() 的起始 offset
+    uint8_t   *buffer;        // 滑動窗口，儲存尚未切出的 byte
+    size_t     buffer_len;
+    int64_t    window_start_ms;
+    int        seen_sentinel; // sentinel 出現後：read 返 0 代表真 EOF
+};
+```
+
+`cursor` 是 v1 的關鍵：依 `IN_MODIFY` 事件來驅動 `read(bin_fd, buf, cap)`，讀成功後 `cursor += n`。若 dispatcher 重啟，cursor 可從外部 state 檔（`--state-file`）恢復，避免重複處理已送出的 byte。
+
+### 0.4 與本文件後續章節的關係
+
+後續章節（三、四、五 ...）描述原設計中以 chunk 為單位的 ingest pipeline（`parse_binary_header()`、`ChunkEntry.crc32` 等）。在 v1：
+
+- 透過 `#ifdef V1_GROWING_BLOB` / `#else` 區分不同路徑，預設編譯走 v1 path。
+- 原 `chunk-based` 路徑保留作為 v2 參考。
+- v1 路徑不呼叫 `parse_binary_header()`，以「從 buffer 提取位元」的函式取代（例如 `extract_frames_from_buffer()`）。
+
+***
 
 ***
 
