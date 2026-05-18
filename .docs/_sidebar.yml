@@ -1,9 +1,9 @@
 sidebar:
-  - title: socket-data-analyzer-c
+  - title: ws_pipeline_dispatcher
     items:
       - title: Home
         page: Home
-      - title: Full System Spec
+      - title: Internal Spec
         page: full_spec
       - title: C Entry Point
         items:
