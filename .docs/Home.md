@@ -25,7 +25,7 @@
 - `full_spec`：本 repo 的內部工作總覽。
 - `pipeline_dispatcher-v1.0`：entry point、fork/exec、exit code。
 - `stream_merge-v1.0`：讀取 growing blob、sentinel、clip JSON Lines。
-- `log_parse-v1.0`：stdin/stdout filter 行為。
+- `log_parse-v1.0`：regex-based 結構化日誌解析、JSON/CSV 輸出、integration filter。
 - `clip_store-v1.0`：純文字 index 與查詢行為。
 - `libpipeline-v1.0`：共用低階 helper。
 - `stream_logger-v1.0`：stderr 診斷輸出。
