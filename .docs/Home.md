@@ -26,14 +26,16 @@
 1. 先看 `README.md`，了解作業主軸與快速執行方式。
 2. 再看 `compliance-matrix`，確認作業要求、目前狀態與後續 milestone。
 3. 接著看 `full_spec`，了解本 repo 的內部邊界、資料流、process topology 與 stdout/stderr 規則。
-4. 要改 orchestration 或 pipeline 行為時，先讀 `pipeline_dispatcher-v1.0`。
-5. 要改某個 applet 時，讀對應 applet spec，再看 `libpipeline-v1.0` / `stream_logger-v1.0` 是否已定義共用行為。
-6. 跨 repo 行為不要在這裡新增完整規格，請更新 Linear。
+4. 要排 v2.1/v2.2 工作時，看 `v2-gap-list`。
+5. 要改 orchestration 或 pipeline 行為時，先讀 `pipeline_dispatcher-v1.0`。
+6. 要改某個 applet 時，讀對應 applet spec，再看 `libpipeline-v1.0` / `stream_logger-v1.0` 是否已定義共用行為。
+7. 跨 repo 行為不要在這裡新增完整規格，請更新 Linear。
 
 ## Suggested Reading By Task
 
 - 想快速跑起來：`README.md` -> `full_spec` -> `pipeline_dispatcher-v1.0`
 - 想確認課程要求是否對齊：`README.md` -> `compliance-matrix` -> `full_spec`
+- 想規劃 v2.1/v2.2：`compliance-matrix` -> `v2-gap-list` -> Linear milestone issues
 - 想修改 `stream_merge` / `log_parse` / `clip_store`：`full_spec` -> applet spec -> `libpipeline-v1.0` / `stream_logger-v1.0`
 - 想追 integration contract：直接看 Linear，不要只依賴 repo docs
 
@@ -41,6 +43,7 @@
 
 - `full_spec`：本 repo 的內部總覽，先定義 role、boundary、data flow 與 topology。
 - `compliance-matrix`：作業 B + 方向三要求對照表，含完成狀態與 follow-up routing。
+- `v2-gap-list`：v2.1/v2.2 缺口列表與 Linear issue planning。
 - `pipeline_dispatcher-v1.0`：entry point、fork/exec、pipe topology、exit code。
 - `stream_merge-v1.0`：讀取 growing blob、sentinel、clip JSON Lines。
 - `log_parse-v1.0`：regex-based 結構化日誌解析、JSON/CSV 輸出、integration filter。

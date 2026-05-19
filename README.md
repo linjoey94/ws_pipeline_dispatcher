@@ -164,6 +164,7 @@ v2 會優先補齊作業交付需要的文件、收斂與證據：
 
 - Repo-local implementation docs：[`./.docs/Home.md`](.docs/Home.md)
 - Assignment compliance matrix：[`./.docs/compliance-matrix.md`](.docs/compliance-matrix.md)
+- v2 gap list：[`./.docs/v2-gap-list.md`](.docs/v2-gap-list.md)
 - Internal spec：[`./.docs/full_spec.md`](.docs/full_spec.md)
 - Cross-repo integration contract：Linear integration docs
 

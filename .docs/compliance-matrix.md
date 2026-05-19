@@ -51,6 +51,8 @@ Remaining work is intentionally split by milestone:
 - v2.1：pipeline code/contract 收斂，包含 stream framing、child process behavior、storage semantics 與 integration mismatch。
 - v2.2：benchmark/demo evidence，包含 final demo script、compatibility matrix、benchmark numbers 與 report-ready artifacts。
 
+v2.1/v2.2 的單一追蹤入口是 `.docs/v2-gap-list.md`，Linear milestone issues 依該文件拆分。
+
 ## Current High-Risk Gaps
 
 - `Makefile` comments still mention earlier skeleton wording even though behavior and README have moved past that framing.
