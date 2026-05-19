@@ -183,7 +183,7 @@ static int append_row(FILE *fp, const char *key, const char *value, long expire_
     return fflush(fp);
 }
 
-static int rewrite_gc(FILE *fp, const char *db_path, long now)
+static int rewrite_gc(FILE *fp, long now)
 {
     row_t *rows = NULL;
     size_t len = 0;
@@ -232,25 +232,18 @@ static int rewrite_gc(FILE *fp, const char *db_path, long now)
     }
     free(line);
 
-    char tmp[PATH_MAX];
-    int n = snprintf(tmp, sizeof(tmp), "%s.tmp.%ld", db_path, (long)getpid());
-    if (n < 0 || (size_t)n >= sizeof(tmp)) {
+    if (ftruncate(fileno(fp), 0) != 0) {
         return -1;
     }
-    FILE *out = fopen(tmp, "w");
-    if (out == NULL) {
+    if (rewind(fp), fseek(fp, 0, SEEK_SET) != 0) {
         return -1;
     }
     for (size_t i = 0; i < len; ++i) {
-        if (rows[i].expire_at > now && fprintf(out, "%s\t%s\t%ld\n", rows[i].key, rows[i].value, rows[i].expire_at) < 0) {
-            fclose(out);
-            unlink(tmp);
+        if (rows[i].expire_at > now && fprintf(fp, "%s\t%s\t%ld\n", rows[i].key, rows[i].value, rows[i].expire_at) < 0) {
             return -1;
         }
     }
-    int out_fd = fileno(out);
-    if (fflush(out) != 0 || fsync(out_fd) != 0 || fclose(out) != 0 || rename(tmp, db_path) != 0) {
-        unlink(tmp);
+    if (fflush(fp) != 0 || fsync(fileno(fp)) != 0) {
         return -1;
     }
     for (size_t i = 0; i < len; ++i) {
@@ -322,7 +315,7 @@ int main(int argc, char *argv[])
         free(row.key);
         free(row.value);
     } else if (do_gc) {
-        rc = rewrite_gc(fp, db, now) == 0 ? 0 : 1;
+        rc = rewrite_gc(fp, now) == 0 ? 0 : 1;
     } else {
         char *line = NULL;
         size_t cap = 0;
@@ -338,10 +331,11 @@ int main(int argc, char *argv[])
                 continue;
             }
             pipeline_buffer_t key = {0};
+            long row_now = (long)time(NULL);
             if (pipeline_buffer_append_str(&key, session) != 0 ||
                 pipeline_buffer_append_char(&key, ':') != 0 ||
                 pipeline_buffer_append_str(&key, ts) != 0 ||
-                append_row(fp, key.data, path, now + ttl) != 0) {
+                append_row(fp, key.data, path, row_now + ttl) != 0) {
                 LOG_ERROR("write db failed: %s", strerror(errno));
                 rc = 1;
                 pipeline_buffer_free(&key);
