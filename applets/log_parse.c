@@ -17,8 +17,7 @@
 #include <string.h>
 #include <unistd.h>
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     stream_logger_set_tag("log_parse");
 
     const char *filter = NULL;

@@ -55,8 +55,7 @@ int pipeline_open_file_watch(const char *file_path, int *watch_descriptor) {
      * IN_MODIFY reports growing-file updates while the writer still holds the
      * fd open; IN_CLOSE_WRITE reports the eventual writer-close completion.
      */
-    int wd = inotify_add_watch(fd, file_path,
-                               IN_MODIFY | IN_CLOSE_WRITE | IN_MOVE_SELF | IN_DELETE_SELF);
+    int wd = inotify_add_watch(fd, file_path, IN_MODIFY | IN_CLOSE_WRITE | IN_MOVE_SELF | IN_DELETE_SELF);
     if (wd < 0) {
         /* Preserve the original watch failure even if close() touches errno. */
         int saved = errno;

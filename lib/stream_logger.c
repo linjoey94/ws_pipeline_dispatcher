@@ -1,7 +1,3 @@
-/*
- * stream_logger.c — minimal v1 implementation.
- */
-
 #include "stream_logger.h"
 
 #include <stdio.h>
@@ -10,7 +6,24 @@
 #include <time.h>
 #include <unistd.h>
 
+/* Process-level tag set once by each applet during startup. */
 static char g_tag[32] = "applet";
+
+static const char *lvl_name(log_level_t lvl)
+{
+    switch (lvl) {
+        case LOG_LVL_DEBUG:
+            return "DEBUG";
+        case LOG_LVL_INFO:
+            return "INFO";
+        case LOG_LVL_WARN:
+            return "WARN";
+        case LOG_LVL_ERROR:
+            return "ERROR";
+        default:
+            return "?";
+    }
+}
 
 void stream_logger_set_tag(const char *tag)
 {
@@ -21,24 +34,14 @@ void stream_logger_set_tag(const char *tag)
     g_tag[sizeof(g_tag) - 1] = '\0';
 }
 
-static const char *lvl_name(log_level_t lvl)
-{
-    switch (lvl) {
-        case LOG_LVL_DEBUG: return "DEBUG";
-        case LOG_LVL_INFO:  return "INFO";
-        case LOG_LVL_WARN:  return "WARN";
-        case LOG_LVL_ERROR: return "ERROR";
-        default:            return "?";
-    }
-}
-
 void stream_logger_log(log_level_t lvl, const char *fmt, ...)
 {
     struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
     struct tm tm;
-    gmtime_r(&ts.tv_sec, &tm);
     char tbuf[32];
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    gmtime_r(&ts.tv_sec, &tm);
     strftime(tbuf, sizeof(tbuf), "%Y-%m-%dT%H:%M:%S", &tm);
 
     fprintf(stderr, "%s.%03ldZ [%s] %s: ",

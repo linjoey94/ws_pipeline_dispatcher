@@ -25,7 +25,7 @@ LIB_OBJS  := $(BUILD_DIR)/libpipeline.o $(BUILD_DIR)/stream_logger.o
 APPLETS   := pipeline_dispatcher stream_merge log_parse clip_store
 BINS      := $(addprefix $(BUILD_DIR)/,$(APPLETS))
 
-TEST_BIN  := $(BUILD_DIR)/test_libpipeline
+TEST_BINS := $(BUILD_DIR)/test_libpipeline $(BUILD_DIR)/test_stream_logger
 
 .PHONY: all clean test smoke
 
@@ -44,11 +44,14 @@ $(BUILD_DIR)/stream_logger.o: lib/stream_logger.c lib/stream_logger.h | $(BUILD_
 $(BUILD_DIR)/%: applets/%.c $(LIB_OBJS) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< $(LIB_OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
-$(TEST_BIN): tests/test_libpipeline.c $(LIB_OBJS) | $(BUILD_DIR)
+$(BUILD_DIR)/test_libpipeline: tests/test_libpipeline.c $(LIB_OBJS) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< $(LIB_OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
-test: $(TEST_BIN)
-	@$(TEST_BIN)
+$(BUILD_DIR)/test_stream_logger: tests/test_stream_logger.c $(LIB_OBJS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $< $(LIB_OBJS) $(LDFLAGS) $(LDLIBS) -o $@
+
+test: $(TEST_BINS)
+	@for test_bin in $(TEST_BINS); do $$test_bin || exit $$?; done
 
 # End-to-end smoke: run dispatcher with skeleton stubs from build/.
 smoke: all
