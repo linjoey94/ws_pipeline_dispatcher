@@ -17,7 +17,8 @@ v2.1 的目標是讓目前可跑的 C pipeline 更穩、更一致，並把已知
 | `clip_store --ttl 0` 目前代表立即過期，但 milestone 期望可表達不過期 | TTL 語意會影響 demo、測試與使用者理解 | GRA-21 | Yes |
 | `pipeline_dispatcher` child exec path / failure propagation 仍可更明確 | final demo 需要能說明 fork/exec/waitpid、exit code 與 failure behavior | GRA-22 | Yes |
 | JSON/key parsing helper 分散在 `log_parse` 與 `clip_store` | 重複 ad-hoc parsing 會讓後續修 edge case 變難 | GRA-23 | Optional but useful |
-| `stream_merge` 尚未達到提案書中的核心切割能力：5s 主動切割、chunk 序號 gap FSM、partial clip、idle timeout、CRC32/去重、meta events extraction | 提案書把 `stream-merge` 定義為核心 applet；但正確 contract 下 `.bin` 應是 binary video bytes，current baseline 卻把 growing file 當 JSON object blob 處理，這不只是功能不足，也是 input model mismatch | GRA-24 | Yes |
+| `stream_merge` 尚未達到提案書中的核心切割能力：以 `.meta.jsonl` 驅動時間窗切割、continuity 檢查、partial clip、idle timeout、event merge | 提案書把 `stream-merge` 定義為核心 applet；但正確 contract 下 `.bin` 應是整個 session 的 binary video buffer，current baseline 卻把 growing file 當 JSON object blob 處理，這不只是功能不足，也是 input model mismatch | GRA-24 | Yes |
+| `edge-ws-host` 目前 file-mode artifact contract 仍是 `chunk_NNNN.bin/json`，且預設 path 與下層期望的 `.bin + .meta.jsonl + .pipeline_end` 不一致 | 若上層不先把 session artifact contract 收斂，下層 `stream_merge` 很難在 v2.1 做出可防守版本 | GRA-30 | Yes |
 | `clip_store --gc` 目前是 in-place rewrite + `fsync()`，不是 tmp file + rename | docs 已誠實標示，但 storage engine 若要更像可防守的作業成果，需要 crash-safety story | GRA-25 | Strongly recommended |
 
 ## v2.2 Scope
@@ -40,6 +41,7 @@ v2.1 planned issues:
 - GRA-23：整理最小 record/path 共用 helper。
 - GRA-24：收斂 stream_merge 提案功能落差與核心切割行為。
 - GRA-25：強化 clip_store GC 與 persistence 行為。
+- GRA-30：修正 edge-ws-host 的 session artifact contract。
 
 v2.2 planned issues:
 
@@ -73,11 +75,15 @@ Out of scope unless integration requires it:
 
 原提案書把 `stream-merge` 定義為核心 applet，目標不只是把 JSON object 從 growing file 裡切出來，而是要處理即時影音 chunk pipeline 的控制語意。
 
+目前先以 ESP32 -> `edge-ws-host` 的持久 WebSocket/TCP ingress 為主。這表示 v2.1 最小版不需要先做 UDP 式 drop/reorder/late-packet handling，但仍要防守 session artifact 自己是否有接好。
+
+定案模型是：一個 session 是 `STRT -> many DATA / JSON messages -> END_`。每個 `DATA` message 只是一小段影片資料，會被 append 到同一個 `{session_id}.bin`；因此 `.bin` 是整個 session 的巨大 binary buffer，`stream_merge` 再依 `.meta.jsonl` 從中抽出 5s 等時間窗對應的 byte range。
+
 正確 contract 應是：
 
-- `{session_id}.bin` 保存 binary video bytes。
-- `{session_id}.meta.jsonl` 保存 chunk metadata，例如 sequence、offset/length、timestamp/duration、CRC、events。
-- `stream_merge` 依 metadata sidecar 從 `.bin` 決定 clip 邊界，再輸出 clip metadata JSONL。
+- `{session_id}.bin` 保存整個 session 的 binary video buffer。
+- `{session_id}.meta.jsonl` 保存最小 sidecar metadata，例如 `kind`、`sequence`、`offset`、`length`、`ts_ms`，必要時再加 events。
+- `stream_merge` 依 metadata sidecar 從 `.bin` 決定 clip byte range，再輸出 clip metadata JSONL。
 
 因此目前 baseline 的主要問題不只是少做功能，而是把 `.bin` 誤當成 JSON payload source。
 
@@ -93,14 +99,20 @@ Out of scope unless integration requires it:
 
 目前未完成，應納入 GRA-24 或後續 v2.1 拆分：
 
-- 5 秒主動切割 complete clip。
+- 以 `.meta.jsonl` 驅動的時間窗切割 complete clip。
 - 以 metadata sidecar 驅動 binary `.bin` 切割，而不是從 `.bin` 解析 JSON。
-- chunk sequence gap detection。
-- `Collecting -> EmitComplete -> EmitPartial -> Reset -> RejectLate` 類 FSM。
+- `sequence` / `offset` continuity 檢查。
+- 最小 `Collecting -> EmitComplete -> EmitPartial -> Reset` 類 FSM。
 - gap 發生時輸出 partial clip 並重設 buffer。
 - idle timeout。
 - CRC32 校驗與重複 chunk 去重。
 - 從 meta chunks 解析 events 並和 clip metadata 合併輸出。
+
+不需要在 v2.1 最小版先做：
+
+- UDP 式封包亂序重排。
+- late packet acceptance/rejection 複雜狀態。
+- 把 `.bin` 真的切出 playable mp4 小檔。
 
 v2.2 驗證應納入：
 

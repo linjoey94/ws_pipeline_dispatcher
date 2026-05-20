@@ -8,8 +8,8 @@
 
 系統分成兩層：
 
-- `edge-ws-host`：接收 ESP32 WebSocket packet，將 payload append 到 stream 檔案，並啟動 C pipeline。
-- `ws_pipeline_dispatcher`：讀取 growing file stream，切出 structured records，過濾 clip event，寫入 file-backed index。
+- `edge-ws-host`：接收 ESP32 的持久 WebSocket/TCP 連線，在 `STRT ... many DATA/JSON ... END_` 的 session 期間持續收 packet，將每個 `DATA` payload append 到 session-level `{session_id}.bin` buffer，將 offset metadata 落到 sidecar，並在 session 結束後啟動 C pipeline。
+- `ws_pipeline_dispatcher`：讀取上層落地的 session artifact，切出 structured clip metadata，過濾 clip event，寫入 file-backed index。
 
 核心設計是把複雜串流處理拆成三個小工具：
 
@@ -39,6 +39,7 @@ stream_merge | log_parse --filter type=clip | clip_store
 ESP32 Video Data
   -> edge-ws-host
   -> /tmp/stream/{session_id}/{session_id}.bin
+  -> /tmp/stream/{session_id}/{session_id}.meta.jsonl
   -> pipeline_dispatcher
        stream_merge stdout -> log_parse stdout -> clip_store
   -> /tmp/clips.db
@@ -65,7 +66,7 @@ pipeline_dispatcher <session_id> <src_dir> <db_path> <ttl_seconds>
 
 ### `stream_merge`
 
-讀取 `{src_dir}/{session_id}.bin` append-only growing file，透過 `inotify` 與 `poll` 觀察檔案更新，看到 `.pipeline_end` 後 drain 剩餘內容並輸出完整 clip JSON Lines。
+正確 contract 下會讀取 `{src_dir}/{session_id}.bin` 與 `{src_dir}/{session_id}.meta.jsonl`。上層目前以持久 WebSocket/TCP 連線接收 ESP32 資料；一個 session 會在 `STRT` 與 `END_` 之間收到很多個 `DATA` messages。每個 `DATA` 只是一小段影片資料，會被 append 到同一個 `.bin`，因此 `.bin` 是供下層操作的 session-level binary buffer。`stream_merge` 依 sidecar 從這個 buffer 抽出 5s 等時間窗對應的 byte range，並輸出 clip metadata。
 
 ### `log_parse`
 
@@ -84,7 +85,7 @@ pipeline 終端的 file-backed index。從 stdin 讀取 clip JSON Lines，用 `s
 
 - Process management：`fork()`、`execv()`、`waitpid()`。
 - IPC：`pipe()`、stdin/stdout chaining。
-- Filesystem streaming：append-only file、sentinel file、tail-read offset。
+- Filesystem streaming：append-only `.bin`、`.meta.jsonl` sidecar、sentinel file、tail-read offset。
 - Event notification：`inotify`、`poll()`。
 - File-backed storage：`open()`、`flock()`、append-only index、GC rewrite 方向。
 - Error handling：exit code propagation、child process failure handling。
@@ -111,6 +112,8 @@ make clean     # 移除 build artifacts
 ## 快速 Demo
 
 最小 end-to-end 使用方式：
+
+注意：下面仍是 repo-local baseline fixture，直接把 JSON object 寫進 `.bin` 只為了讓目前測試與最小 demo 能跑通。v2.1 的正確 cross-repo contract 不是這個 shape，而是由 `edge-ws-host` 用 WebSocket/TCP 接收資料後，落 `{session_id}.bin + {session_id}.meta.jsonl + .pipeline_end`。
 
 ```bash
 make
@@ -149,7 +152,7 @@ cat /tmp/clips.db
 v1 已完成 repo-local pipeline baseline：
 
 - `pipeline_dispatcher` 可建立 `stream_merge -> log_parse -> clip_store` process pipeline。
-- `stream_merge` 可讀取 append-only stream、觀察 sentinel、輸出 clip JSON Lines。
+- `stream_merge` 可讀取 append-only stream、觀察 sentinel、輸出 clip JSON Lines；但 v2.1 仍要把它收斂到 `.bin + .meta.jsonl` contract。
 - `log_parse` 可做 regex parsing、JSON/CSV output 與 JSONL filter。
 - `clip_store` 可寫入 file-backed index，並支援查詢、TTL、GC。
 - `libpipeline` 與 `stream_logger` 提供 applet 共用低階 helper。

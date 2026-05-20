@@ -13,7 +13,7 @@
 它負責：
 
 - 接收 `edge-ws-host` 透過 `spawn()` 傳入的 CLI 參數。
-- 讀取 `/tmp/stream/{session_id}/{session_id}.bin`。
+- 讀取 `/tmp/stream/{session_id}/{session_id}.bin` session-level binary buffer。
 - 監聽 `.pipeline_end` 作為 session 結束訊號。
 - 產生 clip JSON Lines。
 - 過濾 `type=clip`。
@@ -51,8 +51,8 @@ pipeline_dispatcher
 
 1. 上層先建立 `/tmp/stream/{session_id}/` 與對應資料檔。
 2. `pipeline_dispatcher` 以 CLI 參數啟動三個 applet。
-3. `stream_merge` 持續讀 `{session_id}.bin` 的新增內容，並讀 sidecar metadata 來判斷 chunk 邊界、gap、duration 與 events。
-4. `stream_merge` 輸出 clip metadata records 到 stdout。
+3. `stream_merge` 讀 `{session_id}.bin` 與 `{session_id}.meta.jsonl`，用 sidecar metadata 判斷每個 `DATA` payload 在 session buffer 中的 byte range、資料是否有接上、duration 與 events。
+4. `stream_merge` 從 session `.bin` buffer 抽出 5s 等時間窗對應的 byte range，輸出 clip metadata records 到 stdout。
 5. `log_parse` 從 stdin 讀取 records，保留 `type=clip` 或做格式轉換。
 6. `clip_store` 從 stdin 讀取 clip JSON Lines，寫入 `db_path`。
 7. `.pipeline_end` 出現後，`stream_merge` drain 剩餘 bytes 並結束；下游跟著 EOF 收束。
@@ -61,7 +61,7 @@ pipeline_dispatcher
 
 ## Runtime Inputs
 
-`pipeline_dispatcher` 由 `edge-ws-host` 在 `STRT` 後啟動。
+目前最小 cross-repo 版本中，`pipeline_dispatcher` 可由 `edge-ws-host` 在 `END_` 後啟動；只要 session artifact contract 固定為 `.bin + .meta.jsonl + .pipeline_end`，後續若要回到更即時的 growing-file tailing，不需要重做下層資料格式。
 
 ```text
 pipeline_dispatcher <session_id> <src_dir> <db_path> <ttl_seconds>
@@ -76,6 +76,18 @@ pipeline_dispatcher <session_id> <src_dir> <db_path> <ttl_seconds>
 
 若上層想調整啟動時機、CLI 來源或 session layout，這屬於 integration contract，必須先改 Linear 文件。
 
+## Cross-Repo Assumptions
+
+目前先以 `ESP32 -> edge-ws-host` 的 WebSocket/TCP ingress 為主，cross-repo contract 先收斂到以下幾點：
+
+- `.pipeline_end` 代表上層這個 session 的 WS packet 傳遞已結束，而且上層已完成本 session artifact 的寫入與 close。
+- 一個 session 的生命週期是 `STRT -> many DATA / JSON messages -> END_`；`onmessage` 只代表收到一個完整 WS message，不代表整段影片或整個 session。
+- 上層仍需要先讀完整 WS message，才能知道 packet opcode 是 `STRT`、`DATA`、`JSON` 還是 `END_`。
+- WebSocket/TCP 層負責把 message 邊界交給上層 handler；上層不需要自己從 TCP byte stream 重新切 packet。
+- 上層在知道 packet 類型後，需把每個 `DATA` message 的 payload append 到同一個 `{session_id}.bin`，讓它成為整個 session 的巨大 binary video buffer，並把最小 metadata 追加到 `{session_id}.meta.jsonl`。
+- 上層不需要把整個 `DATA` payload 重新包成 JSONL 再丟給下層；binary data 與 sidecar metadata 應分開保存。
+- `JSON` packet 若屬於事件資料，應以 sidecar record 形式寫進 `{session_id}.meta.jsonl`，而不是要求下層直接理解上層 WS packet。
+
 ## Filesystem Assumptions
 
 本 repo 假設上層已建立以下 layout：
@@ -87,11 +99,11 @@ pipeline_dispatcher <session_id> <src_dir> <db_path> <ttl_seconds>
     .pipeline_end
 ```
 
-`{session_id}.bin` 是 append-only growing binary blob，內容應是 video bytes，不是 JSON payload。`stream_merge` 以 tail-read 方式讀取新增 bytes。
+`{session_id}.bin` 是 append-only session-level binary buffer，內容應是所有 `DATA` message payload 串接後的 video bytes，不是 JSON payload。上層目前以 WebSocket/TCP 接 ESP32，因此 v2.1 不先假設 UDP 式亂序或晚到封包處理。
 
-`{session_id}.meta.jsonl` 應提供 chunk metadata，例如 sequence、offset/length、timestamp/duration、CRC 或 events。沒有這類 sidecar metadata，`stream_merge` 無法可靠完成 5s 切割、gap detection、partial clip 與 event extraction。
+`{session_id}.meta.jsonl` 應提供最小 sidecar metadata，例如 `kind`、`sequence`、`offset`、`length`、`ts_ms`，必要時再加 events。沒有這類 sidecar metadata，`stream_merge` 無法可靠從 session buffer 抽出 5s 等時間窗對應的 byte range，也無法完成 continuity 檢查、partial clip 與 event merge。
 
-`.pipeline_end` 表示上層已完成寫入。它不是啟動 pipeline 的 trigger。
+`.pipeline_end` 表示上層已收到 `END_`，整個 session 的 WS packet 傳遞已結束，而且上層已完成 `.bin` / `.meta.jsonl` 寫入。它不是單一 `DATA` message 的結束標記。
 
 `clip_store` 目前把 clips 寫到單一 file-backed index，例如 `/tmp/clips.db`。這是 repo-local storage artifact，不等於跨 repo database contract。
 
@@ -105,6 +117,7 @@ pipeline_dispatcher <session_id> <src_dir> <db_path> <ttl_seconds>
 - `stream_merge`
   - 監聽 growing file 追加內容。
   - 依 metadata sidecar 解讀 chunk 邊界與 clip 切割條件。
+  - 在目前 TCP/WebSocket 假設下，只需先防守 sequence/offset continuity，不先做 UDP 亂序重排。
   - 感知 sentinel，決定何時 drain 並正常退出。
   - 保持 stdout 為 structured records，不輸出診斷文字。
 - `log_parse`
