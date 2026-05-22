@@ -172,7 +172,7 @@ int pipeline_path_join(char *out, size_t sz, const char *dir, const char *name) 
 }
 
 char *pipeline_strndup(const char *src, size_t len) {
-    if (src == NULL) {
+    if (src == NULL || len > SIZE_MAX - 1) {
         return NULL;
     }
     char *out = malloc(len + 1);
@@ -187,6 +187,7 @@ char *pipeline_strndup(const char *src, size_t len) {
 /* Locate the value token after "key": in a JSON line.
  * Returns pointer to first non-whitespace char after the colon, or NULL. */
 static const char *json_key_to_value(const char *line, const char *key) {
+    if (line == NULL || key == NULL) return NULL;
     char needle[128];
     int n = snprintf(needle, sizeof(needle), "\"%s\"", key);
     if (n < 0 || (size_t)n >= sizeof(needle)) return NULL;
