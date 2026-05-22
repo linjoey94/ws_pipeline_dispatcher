@@ -3,3 +3,4 @@ build/
 *.a
 *.so
 *.dSYM/
+test_env/
