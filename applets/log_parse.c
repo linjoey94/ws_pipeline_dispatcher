@@ -44,16 +44,6 @@ static void print_usage(FILE *stream, const char *prog_name) {
     fprintf(stream, "  -h, --help             Show this help message and exit\n");
 }
 
-static char *xstrndup(const char *src, size_t len) {
-    char *out = malloc(len + 1);
-    if (out == NULL) {
-        return NULL;
-    }
-    memcpy(out, src, len);
-    out[len] = '\0';
-    return out;
-}
-
 static void trim_line(char *line) {
     char *start = line;
     while (isspace((unsigned char)*start)) {
@@ -268,7 +258,7 @@ static int parse_regex_record(const char *line, regex_t *regex, record_t *record
             free(matches);
             return 1;
         }
-        record->values[i] = xstrndup(line + m.rm_so, (size_t)(m.rm_eo - m.rm_so));
+        record->values[i] = pipeline_strndup(line + m.rm_so, (size_t)(m.rm_eo - m.rm_so));
         if (record->values[i] == NULL) {
             free_record_values(record);
             free(matches);
@@ -281,58 +271,6 @@ static int parse_regex_record(const char *line, regex_t *regex, record_t *record
 }
 
 /* JSON Lines filtering for integration mode. */
-
-static char *json_find_string_value(const char *line, const char *key)
-{
-    char needle[128];
-    int n = snprintf(needle, sizeof(needle), "\"%s\"", key);
-    if (n < 0 || (size_t)n >= sizeof(needle)) {
-        return NULL;
-    }
-
-    const char *p = strstr(line, needle);
-    if (p == NULL) {
-        return NULL;
-    }
-    p += (size_t)n;
-    while (*p == ' ' || *p == '\t') {
-        ++p;
-    }
-    if (*p != ':') {
-        return NULL;
-    }
-    ++p;
-    while (*p == ' ' || *p == '\t') {
-        ++p;
-    }
-    if (*p != '"') {
-        return NULL;
-    }
-    ++p;
-
-    char *out = malloc(strlen(p) + 1);
-    if (out == NULL) {
-        return NULL;
-    }
-    size_t len = 0;
-    int escaped = 0;
-    for (; *p != '\0'; ++p) {
-        if (escaped) {
-            out[len++] = *p;
-            escaped = 0;
-        } else if (*p == '\\') {
-            escaped = 1;
-        } else if (*p == '"') {
-            out[len] = '\0';
-            return out;
-        } else {
-            out[len++] = *p;
-        }
-    }
-
-    free(out);
-    return NULL;
-}
 
 static int looks_like_json_object(const char *line)
 {
@@ -362,7 +300,7 @@ static int process_json_line(const char *line, const filter_t *filter)
         return 0;
     }
 
-    char *value = json_find_string_value(line, filter->key);
+    char *value = pipeline_json_find_string(line, filter->key);
     if (value == NULL) {
         return 0;
     }

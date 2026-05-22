@@ -317,16 +317,10 @@ static int check_idle(clip_state_t *s, int64_t idle_ms,
             prog);
 }*/
 
-static int path_join(char *out, size_t sz, const char *dir, const char *name)
-{
-    int n = snprintf(out, sz, "%s/%s", dir, name);
-    return n >= 0 && (size_t)n < sz ? 0 : -1;
-}
-
 static int sentinel_exists(const char *src)
 {
     char path[PATH_MAX];
-    if (path_join(path, sizeof(path), src, PIPELINE_SENTINEL_NAME) != 0)
+    if (pipeline_path_join(path, sizeof(path), src, PIPELINE_SENTINEL_NAME) != 0)
         return 0;
     return access(path, F_OK) == 0;
 }
@@ -414,8 +408,8 @@ int main(int argc, char *argv[])
         char bin_name[PATH_MAX], meta_name[PATH_MAX];
         if (snprintf(bin_name,  sizeof(bin_name),  "%s.bin",        session) < 0 ||
             snprintf(meta_name, sizeof(meta_name), "%s.meta.jsonl", session) < 0 ||
-            path_join(bin_path,  sizeof(bin_path),  src, bin_name)  != 0 ||
-            path_join(meta_path, sizeof(meta_path), src, meta_name) != 0) {
+            pipeline_path_join(bin_path,  sizeof(bin_path),  src, bin_name)  != 0 ||
+            pipeline_path_join(meta_path, sizeof(meta_path), src, meta_name) != 0) {
             LOG_ERROR("path construction failed");
             return 1;
         }

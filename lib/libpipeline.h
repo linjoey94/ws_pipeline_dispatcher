@@ -123,10 +123,58 @@ int pipeline_buffer_append_mem(pipeline_buffer_t *buf, const void *src, size_t l
  * @brief Check whether a filename/path refers to the pipeline sentinel.
  *
  * Compares the basename against PIPELINE_SENTINEL_NAME and does not read file contents.
- * 
+ *
  * @param filename filename or path to check.
  * @return 1 for sentinel, 0 otherwise.
  */
 int pipeline_path_is_sentinel(const char *filename);
+
+/**
+ * @brief Build a path by joining dir and name with a '/' separator.
+ *
+ * @param out   output buffer
+ * @param sz    size of output buffer
+ * @param dir   directory path (no trailing slash required)
+ * @param name  filename to append
+ * @return 0 on success, -1 if the result would overflow or args are NULL.
+ */
+int pipeline_path_join(char *out, size_t sz, const char *dir, const char *name);
+
+/**
+ * @brief Duplicate at most len bytes of src into a newly allocated string.
+ *
+ * Equivalent to POSIX strndup(). Always NUL-terminates the result.
+ *
+ * @param src  source buffer (need not be NUL-terminated within len bytes)
+ * @param len  number of bytes to copy
+ * @return pointer to new string, or NULL on allocation failure or NULL src.
+ */
+char *pipeline_strndup(const char *src, size_t len);
+
+/**
+ * @brief Extract a JSON string value for the given key from a JSON object line.
+ *
+ * Performs a simple substring search; does not validate full JSON syntax.
+ * Handles single-level backslash escapes. Returns a newly allocated string
+ * that the caller must free(), or NULL if the key is absent or malformed.
+ *
+ * @param line  NUL-terminated JSON object line
+ * @param key   field name to look up (without quotes)
+ * @return allocated copy of the string value, or NULL on miss/error.
+ */
+char *pipeline_json_find_string(const char *line, const char *key);
+
+/**
+ * @brief Extract a JSON scalar value (string or non-string) for the given key.
+ *
+ * For string values, strips surrounding quotes and handles backslash escapes.
+ * For non-string values (numbers, booleans, null), returns the raw token.
+ * Returns a newly allocated string that the caller must free(), or NULL on miss.
+ *
+ * @param line  NUL-terminated JSON object line
+ * @param key   field name to look up (without quotes)
+ * @return allocated copy of the scalar value, or NULL on miss/error.
+ */
+char *pipeline_json_find_scalar(const char *line, const char *key);
 
 #endif

@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/inotify.h>
@@ -160,4 +161,82 @@ int pipeline_path_is_sentinel(const char *filename) {
     }
 
     return strcmp(filename, PIPELINE_SENTINEL_NAME) == 0 ? 1 : 0;
+}
+
+int pipeline_path_join(char *out, size_t sz, const char *dir, const char *name) {
+    if (out == NULL || dir == NULL || name == NULL) {
+        return -1;
+    }
+    int n = snprintf(out, sz, "%s/%s", dir, name);
+    return n >= 0 && (size_t)n < sz ? 0 : -1;
+}
+
+char *pipeline_strndup(const char *src, size_t len) {
+    if (src == NULL || len > SIZE_MAX - 1) {
+        return NULL;
+    }
+    char *out = malloc(len + 1);
+    if (out == NULL) {
+        return NULL;
+    }
+    memcpy(out, src, len);
+    out[len] = '\0';
+    return out;
+}
+
+/* Locate the value token after "key": in a JSON line.
+ * Returns pointer to first non-whitespace char after the colon, or NULL. */
+static const char *json_key_to_value(const char *line, const char *key) {
+    if (line == NULL || key == NULL) return NULL;
+    char needle[128];
+    int n = snprintf(needle, sizeof(needle), "\"%s\"", key);
+    if (n < 0 || (size_t)n >= sizeof(needle)) return NULL;
+    const char *p = strstr(line, needle);
+    if (p == NULL) return NULL;
+    p += (size_t)n;
+    while (*p == ' ' || *p == '\t') ++p;
+    if (*p++ != ':') return NULL;
+    while (*p == ' ' || *p == '\t') ++p;
+    return p;
+}
+
+char *pipeline_json_find_string(const char *line, const char *key) {
+    const char *p = json_key_to_value(line, key);
+    if (p == NULL || *p != '"') return NULL;
+    ++p;
+
+    pipeline_buffer_t out = {0};
+    int escaped = 0;
+    for (; *p != '\0'; ++p) {
+        if (escaped) {
+            if (pipeline_buffer_append_char(&out, *p) != 0) {
+                pipeline_buffer_free(&out);
+                return NULL;
+            }
+            escaped = 0;
+        } else if (*p == '\\') {
+            escaped = 1;
+        } else if (*p == '"') {
+            return out.data == NULL ? strdup("") : out.data;
+        } else if (pipeline_buffer_append_char(&out, *p) != 0) {
+            pipeline_buffer_free(&out);
+            return NULL;
+        }
+    }
+    pipeline_buffer_free(&out);
+    return NULL;
+}
+
+char *pipeline_json_find_scalar(const char *line, const char *key) {
+    const char *p = json_key_to_value(line, key);
+    if (p == NULL) return NULL;
+    if (*p == '"') return pipeline_json_find_string(line, key);
+
+    const char *start = p;
+    while (*p != '\0' && *p != ',' && *p != '}' &&
+           *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') {
+        ++p;
+    }
+    if (p == start) return NULL;
+    return pipeline_strndup(start, (size_t)(p - start));
 }

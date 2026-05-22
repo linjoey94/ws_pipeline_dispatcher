@@ -35,98 +35,6 @@ static void print_usage(FILE *stream, const char *prog_name) {
     fprintf(stream, "  -h, --help             Show this help message and exit\n");
 }
 
-static char *json_find_string_value(const char *line, const char *key)
-{
-    char needle[128];
-    int n = snprintf(needle, sizeof(needle), "\"%s\"", key);
-    if (n < 0 || (size_t)n >= sizeof(needle)) {
-        return NULL;
-    }
-
-    const char *p = strstr(line, needle);
-    if (p == NULL) {
-        return NULL;
-    }
-    p += (size_t)n;
-    while (*p == ' ' || *p == '\t') {
-        ++p;
-    }
-    if (*p++ != ':') {
-        return NULL;
-    }
-    while (*p == ' ' || *p == '\t') {
-        ++p;
-    }
-    if (*p++ != '"') {
-        return NULL;
-    }
-
-    pipeline_buffer_t out = {0};
-    int escaped = 0;
-    for (; *p != '\0'; ++p) {
-        if (escaped) {
-            if (pipeline_buffer_append_char(&out, *p) != 0) {
-                pipeline_buffer_free(&out);
-                return NULL;
-            }
-            escaped = 0;
-        } else if (*p == '\\') {
-            escaped = 1;
-        } else if (*p == '"') {
-            return out.data == NULL ? strdup("") : out.data;
-        } else if (pipeline_buffer_append_char(&out, *p) != 0) {
-            pipeline_buffer_free(&out);
-            return NULL;
-        }
-    }
-
-    pipeline_buffer_free(&out);
-    return NULL;
-}
-
-static char *json_find_scalar_value(const char *line, const char *key)
-{
-    char needle[128];
-    int n = snprintf(needle, sizeof(needle), "\"%s\"", key);
-    if (n < 0 || (size_t)n >= sizeof(needle)) {
-        return NULL;
-    }
-
-    const char *p = strstr(line, needle);
-    if (p == NULL) {
-        return NULL;
-    }
-    p += (size_t)n;
-    while (*p == ' ' || *p == '\t') {
-        ++p;
-    }
-    if (*p++ != ':') {
-        return NULL;
-    }
-    while (*p == ' ' || *p == '\t') {
-        ++p;
-    }
-    if (*p == '"') {
-        return json_find_string_value(line, key);
-    }
-
-    const char *start = p;
-    while (*p != '\0' && *p != ',' && *p != '}' && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') {
-        ++p;
-    }
-    if (p == start) {
-        return NULL;
-    }
-    size_t len = (size_t)(p - start);
-    char *out = malloc(len + 1);
-    if (out == NULL) {
-        return NULL;
-    }
-    memcpy(out, start, len);
-    out[len] = '\0';
-    return out;
-}
-
 static int parse_row(char *line, row_t *row)
 {
     char *a = strchr(line, '\t');
@@ -380,9 +288,9 @@ int main(int argc, char *argv[])
         char *line = NULL;
         size_t cap = 0;
         while (getline(&line, &cap, stdin) > 0) {
-            char *session = json_find_string_value(line, "session_id");
-            char *ts = json_find_scalar_value(line, "ts");
-            char *path = json_find_string_value(line, "path");
+            char *session = pipeline_json_find_string(line, "session_id");
+            char *ts = pipeline_json_find_scalar(line, "ts");
+            char *path = pipeline_json_find_string(line, "path");
             if (session == NULL || ts == NULL || path == NULL) {
                 LOG_WARN("malformed clip JSON; skipping");
                 free(session);
