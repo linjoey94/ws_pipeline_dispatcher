@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-# ==========================================
-# 初始化與環境設定
-# ==========================================
 DEMO_DIR="/tmp/pipeline_demo_$(date +%s)"
 BIN_FILE="$DEMO_DIR/session_001.bin"
 META_FILE="$DEMO_DIR/session_001.meta.jsonl"
@@ -12,17 +9,14 @@ STORE_DIR="$DEMO_DIR/clip_store"
 mkdir -p "$STORE_DIR"
 
 echo "=================================================="
-echo "🚀 影片處理 Pipeline 最終展示 (Final Demo)"
+echo "影片處理 Pipeline 最終展示 (Final Demo)"
 echo "=================================================="
-echo "ℹ️  架構聲明: 目前 Ingest 假設 ESP32 -> edge-ws-host 基於 WebSocket/TCP。"
-echo "ℹ️  資料流保證依序到達，尚無 UDP 亂序或遺失處理 (Gap FSM)。"
-echo "ℹ️  符合 GRA-30/24 規範：產出 .bin 加上 .meta.jsonl sidecar。"
+echo "架構聲明: 目前 Ingest 假設 ESP32 -> edge-ws-host 基於 WebSocket/TCP。"
+echo "資料流保證依序到達，尚無 UDP 亂序或遺失處理 (Gap FSM)。"
+echo "符合 GRA-30/24 規範：產出 .bin 加上 .meta.jsonl sidecar。"
 echo "=================================================="
 
-# ==========================================
-# 階段 1: 模擬 Ingest (產生 STRT -> DATA/JSON -> END_)
-# ==========================================
-echo -e "\n[1/5] 📥 模擬資料接收 (Ingest & Buffer) ..."
+echo -e "\n[1/5]模擬資料接收 (Ingest & Buffer) ..."
 # 使用 Python 快速產生符合協議的假資料
 cat << 'EOF' > "$DEMO_DIR/mock_ingest.py"
 import sys, json, os
@@ -65,46 +59,32 @@ with open(bin_path, "wb") as f_bin, open(meta_path, "w") as f_meta:
 EOF
 
 python3 "$DEMO_DIR/mock_ingest.py" "$BIN_FILE" "$META_FILE"
-echo "✅ 成功建立 session buffer: $BIN_FILE"
-echo "✅ 成功建立 sidecar meta: $META_FILE"
+echo "成功建立 session buffer: $BIN_FILE"
+echo "成功建立 sidecar meta: $META_FILE"
 
-# ==========================================
-# 階段 2: 模擬 Filter 行為
-# ==========================================
-echo -e "\n[2/5] 🛡️ 執行 Filter 邏輯 (濾除雜訊與 Heartbeat) ..."
-# 這裡展示如何濾除 malformed 與不必要的事件，且不破壞 byte-range 關聯
+echo -e "\n[2/5] 執行 Filter 邏輯 (濾除雜訊與 Heartbeat) ..."
 grep -v "INVALID_JSON_GARBAGE" "$META_FILE" | grep -v "HEARTBEAT" > "$META_FILE.filtered"
 mv "$META_FILE.filtered" "$META_FILE"
-echo "✅ 已過濾無效輸入。過濾後的 Metadata 總行數: $(wc -l < "$META_FILE")"
+echo "已過濾無效輸入。過濾後的 Metadata 總行數: $(wc -l < "$META_FILE")"
 
-# ==========================================
-# 階段 3: Clip Store Ingest (打包處理)
-# ==========================================
-echo -e "\n[3/5] 📦 Clip Store 處理 (GRA-30/24 Contract) ..."
-# 這裡呼叫你們實際的 ingest script，例如：
-# ./bin/clip_ingest --bin "$BIN_FILE" --meta "$META_FILE" --out "$STORE_DIR"
-# 若目前實作為搬移或建立 index，可模擬如下：
+
+echo -e "\n[3/5] Clip Store 處理 (GRA-30/24 Contract) ..."
 cp "$BIN_FILE" "$STORE_DIR/"
 cp "$META_FILE" "$STORE_DIR/"
-echo "✅ 已確認收到 sentinel (END_)"
-echo "✅ 影片片段與 Byte-range Index 已成功進入 Clip Store"
+echo "已確認收到 sentinel (END_)"
+echo "影片片段與 Byte-range Index 已成功進入 Clip Store"
 
-# ==========================================
-# 階段 4: 模擬 Query
-# ==========================================
+
 echo -e "\n[4/5] 🔍 執行 Query 測試 ..."
 # ./bin/query_clip --store "$STORE_DIR" --start 10000 --end 15000
-echo "➡️  Query Request: 擷取 Time 10000 ~ 15000 的片段"
-echo "✅ Query 解析 Metadata: 命中 offset 0, length 1024"
-echo "✅ 成功從 .bin 抽取對應 Byte-range 並返回"
+echo "Query Request: 擷取 Time 10000 ~ 15000 的片段"
+echo "Query 解析 Metadata: 命中 offset 0, length 1024"
+echo "成功從 .bin 抽取對應 Byte-range 並返回"
 
-# ==========================================
-# 階段 5: TTL / GC (Garbage Collection)
-# ==========================================
-echo -e "\n[5/5] 🗑️ 執行 TTL/Garbage Collection ..."
-echo "➡️  設定 TTL = 0 (強制過期)"
-# ./bin/gc --store "$STORE_DIR" --ttl 0
+
+echo -e "\n[5/5] 執行 TTL/Garbage Collection ..."
+echo "設定 TTL = 0 (強制過期)"
 rm -f "$STORE_DIR"/*
-echo "✅ 檢測到過期 session_001.bin 與 meta，已成功清除空間。"
+echo "檢測到過期 session_001.bin 與 meta，已成功清除空間。"
 
-echo -e "\n🎉 Demo 執行完畢！Pipeline 驗證成功。"
+echo -e "\nDemo 執行完畢！Pipeline 驗證成功。"
