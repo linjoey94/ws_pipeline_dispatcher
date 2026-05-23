@@ -23,7 +23,7 @@ def generate_dataset(session_id, base_dir, mode="medium"):
             
             meta = {
                 "kind": "data",
-                "seq": seq,
+                "sequence": seq,
                 "offset": current_offset,
                 "length": length,
                 "ts_ms": 1000 + (i * 100)

@@ -163,8 +163,8 @@ int main(int argc, char *argv[])
     /* Build argv for each applet. */
     char *merge_argv[] = {
         bin_stream_merge,
-        "--src",     (char *)src_dir,
-        "--session", (char *)session_id,
+        (char *)session_id,
+        (char *)src_dir,
         NULL
     };
     char *parse_argv[] = {

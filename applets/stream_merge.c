@@ -77,8 +77,8 @@ static int parse_meta_record(const char *line, size_t len, meta_record_t *out)
         out->kind[ki++] = *p++;
     out->kind[ki] = '\0';
 
-    /* seq */
-    p = find_field(line, "seq");
+    /* sequence */
+    p = find_field(line, "sequence");
     if (!p) return -1;
     char *end;
     out->seq = (uint64_t)strtoull(p, &end, 10);
