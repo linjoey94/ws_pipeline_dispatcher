@@ -1,0 +1,125 @@
+.TH CLIP_STORE 1 "May 2026" "ws_pipeline_dispatcher v2.1" "User Commands"
+.SH NAME
+clip_store \- plain-text clip index with TTL and garbage collection
+.SH SYNOPSIS
+.B clip_store
+.B \-\-db
+.I path
+.RB [ \-\-ttl
+.IR seconds ]
+.br
+.B clip_store
+.B \-\-db
+.I path
+.B \-\-get
+.I key
+.br
+.B clip_store
+.B \-\-db
+.I path
+.B \-\-gc
+.SH DESCRIPTION
+\fBclip_store\fR is a file-backed key-value index for embedded data pipelines.
+In append mode it reads JSON Lines from stdin and appends each record to a
+plain-text database file.
+.PP
+The database format is tab-delimited:
+.PP
+.RS
+.nf
+<key>\\t<value>\\t<expire_at>\\n
+.fi
+.RE
+.PP
+Where \fIkey\fR is \fIsession_id\fB:\fIts\fR, \fIvalue\fR is the clip path
+extracted from the input JSON, and \fIexpire_at\fR is a Unix timestamp
+(0 = never expires).
+.PP
+File locking (\fBflock\fR(2)) is held on all write paths, allowing multiple
+concurrent writers without corruption.
+.SH OPTIONS
+.TP
+.BI \-d ", " \-\-db " path"
+Path to the database file.
+Required for all operations.
+The file is created if it does not exist.
+.TP
+.BI \-t ", " \-\-ttl " seconds"
+Time-To-Live for appended records.
+Records whose \fIexpire_at\fR timestamp has passed are treated as expired and
+excluded from queries and garbage collection output.
+Default: \fB3600\fR.
+Use \fB0\fR to store records that never expire.
+.TP
+.BI \-\-get " key"
+Retrieve the latest live (non-expired) value for \fIkey\fR and print it to
+stdout.
+Exits with status 1 if the key is not found or all matching records are
+expired.
+.TP
+.B \-\-gc
+Run garbage collection: rewrite the database to a temporary file keeping only
+the latest non-expired record per key, then atomically replace the original
+via rename(2).
+Exits after GC completes.
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary to stdout and exit with status 0.
+.SH EXIT STATUS
+.TP
+.B 0
+Operation completed successfully.
+.TP
+.B 1
+An error occurred: missing \fB\-\-db\fR argument, I/O error, or key not found
+(for \fB\-\-get\fR).
+.SH EXAMPLES
+.PP
+Append clip records from stdin with a one-hour TTL:
+.PP
+.RS
+.nf
+echo '{"session_id":"s1","ts":1747065600,"path":"/clips/s1_0.bin"}' | \e
+  clip_store --db /var/db/clips.db --ttl 3600
+.fi
+.RE
+.PP
+Store records that never expire:
+.PP
+.RS
+.nf
+cat clips.jsonl | clip_store --db /var/db/clips.db --ttl 0
+.fi
+.RE
+.PP
+Retrieve a specific clip by key:
+.PP
+.RS
+.nf
+clip_store --db /var/db/clips.db --get s1:1747065600
+.fi
+.RE
+.PP
+Remove expired entries and deduplicate the database:
+.PP
+.RS
+.nf
+clip_store --db /var/db/clips.db --gc
+.fi
+.RE
+.PP
+Final stage of the full pipeline:
+.PP
+.RS
+.nf
+stream_merge sess01 /tmp/stream \e
+  | log_parse --filter type=clip \e
+  | clip_store --db /var/db/clips.db --ttl 3600
+.fi
+.RE
+.SH SEE ALSO
+.BR stream_merge (1),
+.BR log_parse (1),
+.BR pipeline_dispatcher (1),
+.BR flock (2),
+.BR rename (2)

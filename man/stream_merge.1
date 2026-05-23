@@ -1,0 +1,110 @@
+.TH STREAM_MERGE 1 "May 2026" "ws_pipeline_dispatcher v2.1" "User Commands"
+.SH NAME
+stream_merge \- synchronize a growing binary stream with its metadata sidecar and emit clip JSON Lines
+.SH SYNOPSIS
+.B stream_merge
+[\fIOPTIONS\fR] \fIsession_id\fR \fIsrc_dir\fR
+.SH DESCRIPTION
+\fBstream_merge\fR reads a session's metadata sidecar file
+(\fIsession_id\fB.meta.jsonl\fR) incrementally and groups metadata records
+into time-bounded clips.
+It emits one JSON Line per clip to stdout.
+.PP
+The binary data file (\fIsession_id\fB.bin\fR) is opened to verify existence;
+byte-level extraction is not performed in v2.1.
+Processing ends when a \fB.pipeline_end\fR sentinel file appears in
+\fIsrc_dir\fR, after which any remaining metadata is drained and the final
+clip is flushed.
+.PP
+All diagnostic output is written to stderr; stdout carries data only.
+.SH OPTIONS
+.TP
+.BI \-\-clip\-secs " n"
+Target clip duration in seconds.
+A new clip boundary is recorded when the accumulated \fIts_ms\fR span of
+metadata records reaches this threshold.
+Default: \fB5.0\fR.
+.TP
+.BI \-\-idle\-secs " n"
+Idle timeout in seconds.
+If no new metadata records arrive within this period, the current partial
+clip is emitted immediately.
+Default: \fB2.0\fR.
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary to stdout and exit with status 0.
+.SH INPUT FORMAT
+Each record in \fIsession_id\fB.meta.jsonl\fR must have the form:
+.PP
+.RS
+.nf
+{"kind":"data","sequence":<n>,"offset":<n>,"length":<n>,"ts_ms":<ms>}
+.fi
+.RE
+.PP
+Records using the legacy \fBseq\fR field instead of \fBsequence\fR are
+considered malformed and skipped.
+A continuity break (non-consecutive \fIsequence\fR or non-contiguous
+\fIoffset\fR) triggers an immediate partial-clip emission.
+.SH OUTPUT FORMAT
+Each emitted clip is a single JSON Line:
+.PP
+.RS
+.nf
+{"type":"clip","session_id":"<id>","ts":<unix_ts>,
+ "path":"<path>","offset":<n>,"length":<n>,"complete":<bool>}
+.fi
+.RE
+.PP
+\fBcomplete\fR is \fBtrue\fR for a full \fB\-\-clip\-secs\fR window,
+\fBfalse\fR for a partial clip emitted due to a continuity break or idle
+timeout.
+.SH EXIT STATUS
+.TP
+.B 0
+All records processed and final clip flushed successfully.
+.TP
+.B 1
+An error occurred: missing required arguments, file not found, path
+construction failure, or I/O error.
+.SH EXAMPLES
+.PP
+Emit clips from session \fIsess01\fR stored under \fI/tmp/stream\fR using
+default 5-second windows:
+.PP
+.RS
+.nf
+stream_merge sess01 /tmp/stream
+.fi
+.RE
+.PP
+Use 10-second clip windows and a 5-second idle timeout:
+.PP
+.RS
+.nf
+stream_merge --clip-secs 10 --idle-secs 5 sess01 /tmp/stream
+.fi
+.RE
+.PP
+Pipe directly into \fBlog_parse\fR(1) to filter clip records:
+.PP
+.RS
+.nf
+stream_merge sess01 /tmp/stream | log_parse --filter type=clip
+.fi
+.RE
+.PP
+Full three-stage pipeline:
+.PP
+.RS
+.nf
+stream_merge sess01 /tmp/stream \e
+  | log_parse --filter type=clip \e
+  | clip_store --db /var/db/clips.db --ttl 3600
+.fi
+.RE
+.SH SEE ALSO
+.BR log_parse (1),
+.BR clip_store (1),
+.BR pipeline_dispatcher (1),
+.BR inotifywait (1)

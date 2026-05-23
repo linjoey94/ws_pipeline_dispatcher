@@ -94,11 +94,15 @@ pipeline 終端的 file-backed index。從 stdin 讀取 clip JSON Lines，用 `s
 ## 編譯與測試
 
 ```bash
-make           # 編譯所有 applet 到 build/
-make test      # 執行 C unit tests 與 applet shell tests
-make smoke     # 執行 end-to-end smoke test
-make clean     # 移除 build artifacts
+make              # 編譯所有 applet 到 build/
+make test         # 執行 C unit tests 與 applet shell tests
+make smoke        # 執行 end-to-end smoke test
+make install-man  # 安裝 man pages 到 /usr/local/share/man/man1（可用 MANDIR= 覆蓋）
+make clean        # 移除 build artifacts
 ```
+
+安裝後可透過 `man stream_merge`、`man log_parse`、`man clip_store` 查閱文件；
+未安裝時可直接用 `man ./man/stream_merge.1` 預覽。
 
 目前測試涵蓋：
 
@@ -142,6 +146,10 @@ cat /tmp/clips.db
 |-- lib/
 |   |-- libpipeline.{h,c}       # inotify, monotonic time, buffer, sentinel helpers
 |   `-- stream_logger.{h,c}     # stderr-only diagnostic logger
+|-- man/
+|   |-- stream_merge.1          # man page: stream_merge
+|   |-- log_parse.1             # man page: log_parse
+|   `-- clip_store.1            # man page: clip_store
 |-- tests/                      # C unit tests and shell integration tests
 |-- .docs/                      # repo-local implementation and design docs
 |   |-- core/                   # project overview and compliance summary
@@ -172,6 +180,7 @@ v2 會優先補齊作業交付需要的文件、收斂與證據：
 - Applet docs：[`./.docs/applets/`](.docs/applets/)
 - Assignment compliance summary：[`./.docs/core/compliance.md`](.docs/core/compliance.md)
 - Internal overview：[`./.docs/core/overview.md`](.docs/core/overview.md)
+- Man pages：[`man/stream_merge.1`](man/stream_merge.1)、[`man/log_parse.1`](man/log_parse.1)、[`man/clip_store.1`](man/clip_store.1)
 - Cross-repo integration contract：Linear integration docs
 
 若 Linear integration docs 與 repo-local docs 衝突，以 Linear 作為跨 repo contract 的 source of truth；repo `.docs/` 則描述本 repo 的實作細節、測試與設計限制。

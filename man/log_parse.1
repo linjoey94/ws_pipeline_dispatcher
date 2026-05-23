@@ -1,0 +1,110 @@
+.TH LOG_PARSE 1 "May 2026" "ws_pipeline_dispatcher v2.1" "User Commands"
+.SH NAME
+log_parse \- lightweight structured record processor for UNIX pipelines
+.SH SYNOPSIS
+.B log_parse
+.RB [ \-r
+.IR pattern ]
+.RB [ \-e
+.IR fields ]
+.RB [ \-\-format
+.IR fmt ]
+.br
+.B log_parse
+.RB [ \-f
+.IR key=value ]
+.SH DESCRIPTION
+\fBlog_parse\fR reads lines from stdin and writes structured records to stdout.
+It operates in one of two modes:
+.PP
+.B Parse mode
+.RS
+Applies a POSIX extended regular expression (\fB\-\-regex\fR) to each input
+line, maps capture groups to named fields (\fB\-\-fields\fR), and emits the
+result as JSON Lines or CSV (\fB\-\-format\fR).
+.RE
+.PP
+.B Filter mode
+.RS
+Reads JSON Lines from stdin and emits only those records where a specified
+flat field matches a given value (\fB\-\-filter\fR).
+Supports string, number, and boolean field comparisons.
+.RE
+.PP
+All diagnostic output is written to stderr; stdout carries data only.
+.SH OPTIONS
+.TP
+.BI \-r ", " \-\-regex " pattern"
+Apply a POSIX extended regular expression to each input line.
+Parenthesized capture groups are mapped in order to the field names given by
+\fB\-\-fields\fR.
+Cannot be combined with \fB\-\-filter\fR.
+.TP
+.BI \-e ", " \-\-fields " f1,f2,..."
+Comma-separated list of field names for the capture groups in \fB\-\-regex\fR.
+The number of names must match the number of capture groups.
+Required when \fB\-\-regex\fR is used.
+.TP
+.BI \-f ", " \-\-filter " key=value"
+Read JSON Lines from stdin and emit only records where the flat field
+\fIkey\fR equals \fIvalue\fR.
+Cannot be combined with \fB\-\-regex\fR.
+.TP
+.BI \-\-format " fmt"
+Set output format for parse mode.
+Accepted values: \fBjson\fR (default), \fBcsv\fR.
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary to stdout and exit with status 0.
+.SH EXIT STATUS
+.TP
+.B 0
+All input processed successfully.
+.TP
+.B 1
+Invalid arguments or I/O error.
+.SH EXAMPLES
+.PP
+Extract timestamp, level, and message from syslog-style lines:
+.PP
+.RS
+.nf
+echo "2026-05-23 INFO started" | \e
+  log_parse --regex '^([0-9-]+ [0-9:]+) ([A-Z]+) (.+)$' \e
+            --fields ts,level,msg
+.fi
+.RE
+.PP
+Same extraction with CSV output:
+.PP
+.RS
+.nf
+echo "2026-05-23 INFO started" | \e
+  log_parse --regex '^([0-9-]+ [0-9:]+) ([A-Z]+) (.+)$' \e
+            --fields ts,level,msg --format csv
+.fi
+.RE
+.PP
+Keep only clip records from a stream of JSON Lines:
+.PP
+.RS
+.nf
+cat events.jsonl | log_parse --filter type=clip
+.fi
+.RE
+.PP
+Middle stage of the full pipeline:
+.PP
+.RS
+.nf
+stream_merge sess01 /tmp/stream \e
+  | log_parse --filter type=clip \e
+  | clip_store --db /var/db/clips.db
+.fi
+.RE
+.SH SEE ALSO
+.BR stream_merge (1),
+.BR clip_store (1),
+.BR grep (1),
+.BR awk (1),
+.BR regex (7)
