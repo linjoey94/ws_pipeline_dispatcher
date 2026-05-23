@@ -4,7 +4,6 @@
 #   make            — build all binaries into build/
 #   make test       — build & run unit tests
 #   make smoke      — end-to-end skeleton smoke test
-#   make demo       — run the final pipeline demo script (新增)
 #   make install-man — install man pages to $(MANDIR) (default: /usr/local/share/man/man1)
 #   make clean      — remove build artifacts
 #
@@ -34,7 +33,7 @@ MAN_DIR   := man
 MAN_PAGES := $(MAN_DIR)/stream_merge.1 $(MAN_DIR)/log_parse.1 $(MAN_DIR)/clip_store.1
 MANDIR    ?= /usr/local/share/man/man1
 
-.PHONY: all clean test smoke demo install-man
+.PHONY: all clean test smoke install-man
 
 all: $(BINS)
 
@@ -71,11 +70,7 @@ test: $(TEST_BINS) $(BINS)
 smoke: all
 	@mkdir -p /tmp/ws_pipeline_smoke
 	@cd $(BUILD_DIR) && ./pipeline_dispatcher \
-		smoke_session /tmp/ws_pipeline_smoke /tmp/ws_pipeline_smoke/clips.db 300
-
-demo: all
-	@echo "啟動 Final Demo Pipeline..."
-	@bash scripts/run_final_demo.sh
+	    smoke_session /tmp/ws_pipeline_smoke /tmp/ws_pipeline_smoke/clips.db 300
 
 install-man: $(MAN_PAGES)
 	install -d $(MANDIR)
